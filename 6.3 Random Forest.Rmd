@@ -1,0 +1,70 @@
+
+3. Perform the Random Forest analysis of the credit data, (not the GermanCredit data). Produce a report using an Rnotebook explaining the data, the analysis, and the findings.
+Organize you report using the Five Steps.
+
+# step 1 - collect data
+We use the same credit data for Random Forest analysis.
+
+# step 2 - exploring and preparing the data
+##load the credit dataset
+```{r}
+credit <- read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml10/credit.csv")
+library(caret)
+```
+
+# step 3 - training a model on the data
+##random forest with default settings
+```{r}
+library(randomForest)
+set.seed(300)
+rf <- randomForest(default ~ ., data = credit)
+rf
+```
+We use the default randomForest() parameters to work with the credit data.Again, the set.seed() function ensures that the result can be replicated.
+
+The output notes that the random forest included 500 trees and tried four variables at each split, just as we expected. At first  lance, we may be alarmed at the seemingly poor performance according to the confusion matrix-the error rate of 23.8%.However, this confusion matrix does not show resubstitution error. Instead, it reflects the out-of-bag error rate (listed in the output as OOB estimate of error rate), which unlike resubstitution error, is an unbiased estimate of the test set error. This means that it should be a fairly reasonable estimate of future performance.
+
+# step 4 & 5 - improving and evaluating model performance
+##Evaluating random forest performance
+To evaluate the performance, We compare an auto-tuned random forest to the best auto-tuned boosted C5.0 model we've developed. 
+We must first load caret and set our training control options. For the most accurate comparison of model performance, we'll use repeated 10-fold cross-validation, or 10-fold CV repeated 10 times.
+```{r}
+library(caret)
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10, repeats = 10)
+```
+
+##auto-tune a random forest
+Next, we'll set up the tuning grid for the random forest. The only tuning parameter for this model is mtry, which defines how many features are randomly selected at each split. By default, the random forest will use sqrt(16), or four features per tree. To be thorough, we'll also test values half of that, twice that, as well as the full set of 16 features. Thus, we need to create a grid with values of 2, 4, 8, and 16.
+```{r}
+grid_rf <- expand.grid(.mtry = c(2, 4, 8, 16))
+```
+
+We can supply the resulting grid to the train() function with the ctrl object as follows. We'll use the kappa metric to select the best model.
+```{r}
+set.seed(300)
+m_rf <- train(default ~ ., data = credit, method = "rf",
+              metric = "Kappa", trControl = ctrl,
+              tuneGrid = grid_rf)
+m_rf
+```
+
+##auto-tune a boosted C5.0 decision tree
+```{r}
+library(C50)
+library(plyr)
+grid_c50 <- expand.grid(.model = "tree",
+                        .trials = c(10, 20, 30, 40),
+                        .winnow = "FALSE")
+
+set.seed(300)
+m_c50 <- train(default ~ ., data = credit, method = "C5.0",
+                metric = "Kappa", trControl = ctrl,
+               tuneGrid = grid_c50)
+m_c50
+```
+With a kappa of about 0.361, the random forest model with mtry = 16 was the winner among these models. It was higher than the best C5.0 decision tree, which had a kappa of about 0.334. Based on these results, we would submit the random forest as our final model.
+
+
+
+

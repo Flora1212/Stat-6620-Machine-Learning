@@ -1,0 +1,172 @@
+
+2. Perform the Cluster analysis on the sns data. Produce a report explaining the data, the analysis, and the findings. Using an Rnotebook.
+Organize you report using the Five Steps.
+
+*Clustering is an unsupervised machine learning task that automatically divides the data into clusters, or groups of similar items.*
+
+# Step 1 - collecting data
+We use a dataset representing a random sample of 30,000 U.S. high school students who had profiles on a well-known SNS in 2006.The data was sampled evenly across four high school graduation years (2006 through 2009) representing the senior, junior, sophomore, and freshman classes at the time of data collection.Using an automated web crawler, the full text of the SNS profiles were downloaded, and each teen's gender, age, and number of SNS friends was recorded.
+
+A text mining tool was used to divide the remaining SNS page content into words.From the top 500 words appearing across all the pages, 36 words were chosen to represent five categories of interests: extracurricular activities, fashion, religion, romance, and antisocial behavior. The 36 words include terms such as football, sexy, kissed, bible, shopping, death, and drugs. The final dataset indicates, for each person, how many times each word appeared in the person's SNS profile.
+
+# Step 2 - exploring and preparing the data
+#Import sns data into Rstudio
+```{r}
+teens <- read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml12/snsdata.csv")
+str(teens)
+```
+From the outputs, we can see that the data include 30,000 teenagers with four variables indicating personal characteristics and 36 words indicating interests. For the gender variable, there are NAs, which are the missing values and we need to take care of them.
+
+#look at missing data for female variable
+```{r}
+table(teens$gender)
+table(teens$gender, useNA = "ifany")
+
+```
+To include the NA values (if there are any), we add an additional parameter: useNA="ifany".
+Here, we see that 2,724 records (9 percent) have missing gender data. Interestingly, there are over four times as many females as males in the SNS data, suggesting that males are not as inclined to use SNS websites as females.
+
+#look at missing data for age variable
+```{r}
+summary(teens$age)
+```
+For numeric data, the summary() command tells us the number of missing NA values.
+A total of 5,086 records (17 percent) have missing ages. Also concerning is the fact that the minimum and maximum values seem to be unreasonable; it is unlikely that a 3 year old or a 106 year old is attending high school. To ensure that these extreme values don't cause problems for the analysis, we'll need to clean them up before moving on.
+
+#eliminate age outliers
+```{r}
+teens$age <- ifelse(teens$age >= 13 & teens$age < 20,
+                     teens$age, NA)
+
+summary(teens$age)
+```
+We choose 13 to 20 as the reseanable age range for high school student.Any age value falling outside this range should be treated the same as missing data, that is NA-we cannot trust the age provided. 
+
+By rechecking the summary() output, we see that the age range now follows a distribution that looks much more like an actual high school.
+
+#Data preparation - dummy coding missing values
+#reassign missing gender values to "unknown"
+A solution for categorical variables like gender is to treat a missing value as a separate category.
+```{r}
+teens$female <- ifelse(teens$gender == "F" &
+                         !is.na(teens$gender), 1, 0)
+teens$no_gender <- ifelse(is.na(teens$gender), 1, 0)
+```
+The is.na() function tests whether gender is equal to NA. The first statement assigns teens$female the value 1 if gender is equal to F and the gender is not equal to NA; otherwise, it assigns the value 0.In the second statement, if is.na() returns TRUE, meaning the gender is missing, the teens$no_gender variable is assigned 1; otherwise, it is assigned the value 0.
+
+#check our recoding work
+```{r}
+table(teens$gender, useNA = "ifany")
+table(teens$female, useNA = "ifany")
+table(teens$no_gender, useNA = "ifany")
+```
+The number of 1 values for teens$female and teens$no_gender matches the number of F and NA values, respectively, so we should be able to trust our work.
+
+#Data preparation - imputing the missing values
+#finding the mean age by cohort
+As age is numeric, it doesn't make sense to create an additional category for the unknown values. Instead, we'll use a different strategy known as imputation, which involves filling in the missing data with a guess as to the true value.
+Most people in a graduation cohort were born within a single calendar year. If we can identify the typical age for each cohort, we would have a
+fairly reasonable estimate of the age of a student in that graduation year.
+
+```{r}
+mean(teens$age) # doesn't work
+mean(teens$age, na.rm = TRUE) # works
+```
+To exclude the missing values for mean calculation, We can correct this by adding an additional parameter to remove the missing values.The na.rm= True command is used to exclude missing Values from analyses. 
+The output reveals that the average student in our data is about 17 years old. This only gets us part of the way there; we actually need the average age for each graduation year.In this case, the aggregate() function is the tool for the job. 
+
+# age by cohort
+```{r}
+aggregate(data = teens, age ~ gradyear, mean, na.rm = TRUE)
+```
+The aggregate() function computes statistics for subgroups of data. Here, it calculates the mean age by graduation year after removing the NA values.The aggregate() output is a data frame. This is helpful for some purposes, but would require extra work to merge back onto our original data. As an alternative, we can use the ave() function, which returns a vector with the group means repeated so that the result is equal in length to the original vector.
+
+# create a vector with the average age for each gradyear, repeated by person
+To impute these means onto the missing values, we need one more ifelse() call to use the ave_age value only if the original age value was NA.
+```{r}
+ave_age <- ave(teens$age, teens$gradyear,
+                 FUN = function(x) mean(x, na.rm = TRUE))
+teens$age <- ifelse(is.na(teens$age), ave_age, teens$age)
+```
+
+# check the summary results to ensure missing values are eliminated
+```{r}
+summary(teens$age)
+```
+
+# Step 3 - training a model on the data
+To cluster the teenagers into marketing segments, we will use an implementation of k-means in the stats package.The kmeans() function requires a data frame containing only numeric data and a parameter specifying the desired number of clusters.
+We'll start our cluster analysis by considering only the 36 features that represent the number of times various interests appeared on the teen SNS profiles.
+
+First, select our interested features
+```{r}
+interests <- teens[5:40]
+```
+
+Then, to apply the z-score standardization to the interests data frame, we can use the scale() function with lapply().Since lapply() returns a matrix, it must be coerced back to data frame form using the as.data.frame() function.
+```{r}
+interests_z <- as.data.frame(lapply(interests, scale))
+```
+
+
+Chose k=5 and train the k-means model.
+```{r}
+set.seed(2345)
+teen_clusters <- kmeans(interests_z, 5)
+```
+The result of the k-means clustering process is a list named teen_clusters that stores the properties of each of the five clusters.
+
+# Step 4 - evaluating model performance
+Evaluating clustering results can be somewhat subjective. Ultimately, the success or failure of the model hinges on whether the clusters are useful for their intended purpose. As the goal of this analysis was to identify clusters of teenagers with similar interests for marketing purposes, we will largely measure our success in qualitative terms. 
+
+One of the most basic ways to evaluate the utility of a set of clusters is to examine the number of examples falling in each of the groups. If the groups are too large or too small, they are not likely to be very useful.
+# look at the size of the clusters
+```{r}
+teen_clusters$size
+```
+The smallest cluster has 600 teenagers (2 percent) while the largest cluster has 21,514 (72 percent). Although the large gap between the number of people in the largest and smallest clusters is slightly concerning, without examining these groups more carefully, we will not know
+whether or not this indicates a problem.Becasue this may indicate the reality.
+
+# look at the cluster centers
+```{r}
+teen_clusters$centers
+```
+The rows of the output (labeled 1 to 5) refer to the five clusters, while the numbers across each row indicate the cluster's average value for the interest listed at the top of the column. As the values are z-score standardized, positive values are above the overall mean level for all the teens and negative values are below the overall mean.For example, the third row has the highest value in the basketball column, which
+means that cluster 3 has the highest average interest in basketball among all the clusters.
+
+Check and analyze the output, we can infer some characteristics of the clusters. For example, Cluster 3 is substantially above the mean interest level on all the sports. This suggests that this may be a group of Athletes. Cluster 1 includes the most mentions of "cheerleading," the word "hot," and is above the average level of football interest. Are these the so-called Princesses?
+
+Interestingly, Cluster 5 is distinguished by the fact that it is unexceptional; its members had lower-than-average levels of interest in every measured activity. It is also the single largest group in terms of the number of members. One potential explanation is that these users created a profile on the website but never posted any interests.
+
+Based on these profiles, the executive could sell targeted advertising impressions to businesses with products relevant to one or more of the clusters.
+
+# Step 5: Improving model performance
+We'll begin by applying the clusters back onto the full dataset.
+# apply the cluster IDs to the original data frame
+```{r}
+teens$cluster <- teen_clusters$cluster
+```
+# look at the first five records
+```{r}
+teens[1:5, c("cluster", "gender", "age", "friends")]
+```
+
+# mean age by cluster
+```{r}
+aggregate(data = teens, age ~ cluster, mean)
+```
+Using the aggregate() function, we can also look at the demographic characteristics of the clusters. The mean age does not vary much by cluster, which is not too surprising as these teen identities are often determined before high school.
+
+# proportion of females by cluster
+```{r}
+aggregate(data = teens, female ~ cluster, mean)
+```
+On the other hand, there are some substantial differences in the proportion of females by cluster.Recall that overall about 74 percent of the SNS users are female. Cluster 1, the so-called Princesses, is nearly 84 percent female, while Cluster 2 and Cluster 5 are only about 70 percent female. These disparities imply that there are differences in the interests that teen boys and girls discuss on their social networking pages.
+
+# mean number of friends by cluster
+```{r}
+aggregate(data = teens, friends ~ cluster, mean)
+```
+As to friends, on an average, Princesses have the most friends (41.4), followed by Athletes (37.2) and Brains (32.6). On the low end are Criminals (30.5) and Basket Cases (27.7).As with gender, the connection between a teen's number of friends and their predicted cluster is remarkable, given that we did not use the friendship data as an input to the clustering algorithm. 
+
+

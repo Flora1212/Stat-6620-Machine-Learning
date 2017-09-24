@@ -1,0 +1,51 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# import HouseVote84 data set from the mlbench package
+install.packages("mlbench")
+library(mlbench)
+data(HouseVotes84)
+
+# examine the structure of the HouseVote84 data
+str(HouseVotes84)
+
+# examine the class variable more carefully
+str(HouseVotes84$Class)
+table(HouseVotes84$Class)
+
+# creating training and test datasets
+HouseVotes84_train <- HouseVotes84[1:300, ]
+HouseVotes84_test <- HouseVotes84[301:435, ]
+ 
+# also save the labels
+HouseVotes84_train_labels <- HouseVotes84[1:300, ]$Class
+HouseVotes84_test_labels  <- HouseVotes84[301:435, ]$Class
+ 
+# check that the proportion of votes is similar for train and test data
+prop.table(table(HouseVotes84_train_labels))
+prop.table(table(HouseVotes84_test_labels))
+
+#Step 3 - training a model on the data
+library(e1071)
+HVote_classifier <- naiveBayes(HouseVotes84_train, HouseVotes84_train_labels)
+
+#Step 4 - evaluating model performance
+HVote_test_pred <- predict(HVote_classifier, HouseVotes84_test)
+head(HVote_test_pred)
+
+library(gmodels)
+CrossTable(HVote_test_pred, HouseVotes84_test_labels,
+          prop.chisq = FALSE, prop.t = FALSE, prop.r = FALSE,
+          dnn = c('predicted', 'actual'))
+
+# Step 5 - improving model performance
+HVote_classifier2 <- naiveBayes(HouseVotes84_train, HouseVotes84_train_labels, laplace = 1)
+HVote_test_pred2 <- predict(HVote_classifier2, HouseVotes84_test)
+CrossTable(HVote_test_pred2, HouseVotes84_test_labels,
+          prop.chisq = FALSE, prop.t = FALSE, prop.r = FALSE,
+         dnn = c('predicted', 'actual'))
+
+
+

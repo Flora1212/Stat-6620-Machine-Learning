@@ -1,0 +1,196 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+Qingying Li(Flora),Stat 6610, Hw5, Session 2
+
+2. Perform the Regression Tree based analysis of the redwine data. Produce a report using an Rnotebook explaining the data, the analysis, and the findings.
+Organize you report using the Five Steps.
+
+#Estimating the quality of wines with regression trees and model trees
+
+##Step 1 - collecting data
+We use data donated to the UCI Machine Learning Data Repository (http://archive.ics.uci.edu/ml) by P. Cortez, A. Cerdeira, F. Almeida, T. Matos, and J. Reis. The redwine dataset contains 1599 observations and 12 variables. Among the variables, there are 11 chemical properties.The samples were then rated in a blind tasting by panels of no less than three judges on a quality scale ranging from zero (very bad) to 10 (excellent). In the case of judges disagreeing on the rating, the median value was used.
+
+##Step 2 - exploring and preparing the data
+
+Import the redwine dataset directly from the weblink
+```{r}
+redwine <- read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml10/redwines.csv")
+```
+
+Examine the redwine data
+```{r}
+str(redwine)
+```
+The redwine data includes 11 features and the quality outcome.One of the advantages of trees is that they can handle many types of data without preprocessing. This means we do not need to normalize or standardize the features.
+
+The distribution of quality ratings
+```{r}
+hist(redwine$quality)
+```
+The wine quality values appear to follow a fairly normal, bell-shaped distribution, centered around a value of five and six.
+
+Summary statistics of the wine data
+```{r}
+summary(redwine)
+```
+
+Divide into train and test dataset
+```{r}
+redwine_train <- redwine[1:1120, ]
+redwine_test <- redwine[1121:1599, ]
+```
+The redwine data is already randomized, so we can partition into two sets of contiguous rows. Here, we used sets of 75 percent and 25 percent for training and testing, respectively.
+
+##Step 3 - training a model on the data
+The rpart (recursive partitioning) package offers the most faithful implementation of regression trees as they were described by the CART team.
+
+Train data using regression trees 
+```{r}
+library(rpart)
+m.rpart <- rpart(quality ~ ., data = redwine_train)
+```
+We use quality as the dependent variable and other features as the independent variables.
+
+Get basic information about the tree
+```{r}
+m.rpart
+```
+For each node in the tree, the number of examples reaching the decision point is listed. For instance, all 1120 examples begin at the root node, of which 847 have alcohol < 11.15 and 273 have alcohol >= 11.15.
+
+Nodes indicated by * are terminal or leaf nodes, which means that they result in a prediction (volatile.acidity listed here as yval).For example, node 8 has a yval of 4.731707. When the tree is used for predictions, any redwine samples with alcohol < 11.15 and volatile.acidity>=0.8125,would therefore be predicted to have a quality value of 4.73.
+
+Get more detailed information about the tree
+```{r}
+summary(m.rpart)
+```
+A more detailed summary of the tree's fit, including the mean squared error for each of the nodes and an overall measure of feature importance, can be obtained using the summary(m.rpart) command.
+
+Use the rpart.plot package to create a visualization
+```{r}
+library(rpart.plot)
+```
+A basic decision tree diagram
+```{r}
+rpart.plot(m.rpart, digits = 3)
+```
+The digits parameter controls the number of numeric digits to include in the diagram.
+
+A few adjustments to the diagram
+```{r}
+rpart.plot(m.rpart, digits = 4, fallen.leaves = TRUE, type = 3, extra = 100)
+```
+The fallen.leaves parameter forces the leaf nodes to be aligned at the bottom of the plot, while the type
+and extra parameters affect the way the decisions and nodes are labeled.
+
+In both cases above, the numbers shown in the leaf nodes are the predicted values for the examples reaching that node.
+
+##Step 4 - evaluating model performance
+Generate predictions for the testing dataset
+```{r}
+p.rpart <- predict(m.rpart, redwine_test)
+```
+
+Compare the distribution of predicted values vs. actual values
+```{r}
+summary(p.rpart)
+summary(redwine_test$quality)
+```
+Look at the summary statistics of our predictions suggests a potential problem; the predictions fall on a much narrower range than the true values.
+
+This finding suggests that the model is not correctly identifying the extreme cases, in particular the best and worst wines. However, between the first and third quartile may be doing well.
+
+Compare the correlation
+```{r}
+cor(p.rpart, redwine_test$quality)
+```
+We can use cor() functions to check the correlation between predicted values and true values. The correlation is 0.61, which is acceptable. It only meatures how strong the relationshi is, but not measure how far off the predictions were from the true values.
+
+Measure performance with the mean absolute error
+The mean absolute error can be used to consider how far, on average, the prediction was from the true value.As the name implies, it takes the mean of the absolute value of the errors (error is the difference between predicted and actual values).
+
+Function to calculate the mean absolute error
+```{r}
+MAE <- function(actual, predicted) {
+  mean(abs(actual - predicted))  
+}
+```
+Here, abs(x) function computes the absolute value of x.
+
+Mean absolute error between predicted and actual values
+```{r}
+MAE(p.rpart, redwine_test$quality)
+```
+This implies that, on average, the difference between our model's predictions and the true quality score was about 0.54. On the scale of zero to ten for the quality, the model seems doing quite well.
+
+Because most wines were neither very good nor very bad; the typical quality score was around five to six. Therefore, a classifier that did nothing but predict the mean value may still do fairly well according to this metric.
+
+Mean absolute error between predicted and actual values
+```{r}
+mean(redwine_train$quality)
+```
+```{r}
+MAE(5.632143, redwine_test$quality)
+```
+Our regression tree (MAE = 0.54) comes closer on average to the true quality score than the imputed mean (MAE = 0.70).
+
+##Step 5 - improving model performance
+By using model trees. A model tree improves on regression trees by replacing the leaf nodes with regression
+models. This often results in more accurate results than regression trees, which use only a single value for prediction at the leaf nodes.
+
+The current state-of-the-art in model trees is the M5' algorithm (M5-prime)
+
+Train a M5' Model Tree
+```{r}
+library(RWeka)
+m.m5p <- M5P(quality ~ ., data = redwine_train)
+```
+
+Display the tree
+```{r}
+m.m5p
+```
+A key difference of the model tree compared with regression tree is that the nodes terminate not in a numeric prediction, but a linear model (shown here as LM1).
+
+The outputs above can be explained the same as a regression model. For instance, the -0.947 coefficient for volatile.acidity implies that for an increase of 1 unit of volatile.acidity, the redwine quality is expected to decrease by 0.9474.
+
+*There is a problem with my R output here, I use the same code as the whitewine, but it only shows one rule of the regression model and didn't show the tree.*
+
+Get a summary of the model's performance on trainning dataset
+```{r}
+summary(m.m5p)
+```
+
+Generate predictions for the model
+```{r}
+p.m5p <- predict(m.m5p, redwine_test)
+summary(p.m5p)
+```
+The model tree appears to be predicting a little bit wider range of values than the regression tree.
+
+Correlation between the predicted and true values
+```{r}
+cor(p.m5p, redwine_test$quality)
+```
+The correlation increases slightly from 0.61 to 0.67.
+
+Mean absolute error of predicted and true values
+(uses a custom function defined above)
+```{r}
+MAE(redwine_test$quality, p.m5p)
+```
+The mean absolute error of 0.48 is smaller than the regression tree(MAE=0.54),indicating better performance.
+
+
+
+
+
+
+
+
+
+
+
+

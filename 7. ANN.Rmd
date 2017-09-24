@@ -1,0 +1,183 @@
+
+Perform the ANN analysis on the concrete data. Produce a report explaining the data, the analysis, and the findings. Optional: Using an Rnotebook.
+Organize you report using the Five Steps.
+
+## Step 1 - collecting data
+We use a data on the compressive strength of concrete donated to the UCI Machine Learning Data Repository by I-Cheng Yeh. The concrete dataset contains 1,030 examples of concrete with eight features describing the components used in the mixture. These features include the amount (in kilograms per cubic meter) of cement, slag, ash, water, superplasticizer, coarse aggregate, and fine aggregate used in the product in addition to the aging time (measured in days).
+
+## Step 2 - exploring and preparing the data
+Read in data and examine structure
+```{r}
+concrete <- read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml11/concrete.csv")
+str(concrete)
+```
+
+The outputs show 1030 observations, 8 features and 1 response variable. However, there is a problem here. Neural networks work best when the input data are scaled to a narrow range around zero, and here, we see values ranging anywhere from zero up to over a thousand.
+
+To solve the problem, if the data follow a bell-shaped curve (a normal distribution), then it may make sense to use standardization via R's built-in scale() function. If the data follow a uniform distribution or are severely nonnormal, then normalization to a 0-1 range may be more appropriate. In this case, we'll use the latter.
+
+Custom normalization function
+```{r}
+normalize <- function(x) { 
+  return((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+Apply normalization to entire data frame
+```{r}
+concrete_norm <- as.data.frame(lapply(concrete, normalize))
+```
+
+Confirm that the range is now between zero and one
+```{r}
+summary(concrete_norm$strength)
+```
+we can see that the minimum and maximum strength are now 0 and 1, respectively.
+
+Compared to the original minimum and maximum
+```{r}
+summary(concrete$strength)
+```
+We can see that the original minimum and maximum values were 2.33 and 82.60.
+
+Create training and test data
+We will partition the data into a training set with 75 percent of the examples and a testing set with 25 percent. The dataset has already be in a random order.
+```{r}
+concrete_train <- concrete_norm[1:773, ]
+concrete_test <- concrete_norm[774:1030, ]
+```
+We'll use the training dataset to build the neural network and the testing dataset to evaluate how well the model generalizes to future results.
+
+## Step 3 - training a model on the data
+Train the neuralnet model
+We will use a multilayer feedforward neural network.
+```{r}
+library(neuralnet)
+```
+Simple ANN with only a single hidden neuron
+```{r}
+set.seed(12345) # to guarantee repeatable results
+concrete_model <- neuralnet(formula = strength ~ cement + slag +
+                              ash + water + superplastic + 
+                              coarseagg + fineagg + age,
+                              data = concrete_train)
+```
+We begin by training the simplest multilayer feedforward network with only a single hidden node.
+
+Visualize the network topology
+```{r}
+plot(concrete_model)
+```
+For the outputs, there is one input node for each of the eight features, followed by a single hidden node and a single output node that predicts the concrete strength. The weights for each of the connections are also depicted, as are the bias terms (indicated by the nodes labeled with the number 1). The bias terms are numeric constants that allow the value at the indicated nodes to be shifted upward or downward, much like the intercept in a linear equation.
+
+At the bottom of the figure, R reports the number of training steps and Sum of Squared Errors (SSE), which is the sum of the squared predicted minus actual values. A lower SSE implies better predictive performance.
+
+Alternative plot
+```{r}
+library(NeuralNetTools)
+```
+
+Plotnet
+```{r}
+par(mar = numeric(4), family = 'serif')
+plotnet(concrete_model, alpha = 0.6)
+```
+## Step 4: Evaluating model performance
+Obtain model results
+```{r}
+model_results <- compute(concrete_model, concrete_test[1:8])
+```
+The compute() function returns a list with two components: $neurons, which stores the neurons for each layer in the network, and $net.result, which stores the predicted values.
+
+Obtain predicted strength values
+```{r}
+predicted_strength <- model_results$net.result
+```
+This is a numeric prediction problem rather than a classification problem, we cannot use a confusion matrix to examine model accuracy. Instead, we must measure the correlation between our predicted concrete strength and the true value. This provides insight into the strength of the linear association between the two variables.
+
+Examine the correlation between predicted and actual values
+```{r}
+cor(predicted_strength, concrete_test$strength)
+```
+The correlation here of about 0.806 indicates a fairly strong relationship.
+
+Produce actual predictions by:
+```{r}
+head(predicted_strength)
+
+concrete_train_original_strength <- concrete[1:773,"strength"]
+
+strength_min <- min(concrete_train_original_strength)
+strength_max <- max(concrete_train_original_strength)
+
+head(concrete_train_original_strength)
+```
+Custom normalization function
+```{r}
+unnormalize <- function(x, min, max) { 
+  return( (max - min)*x + min )
+}
+
+strength_pred <- unnormalize(predicted_strength, strength_min, strength_max)
+strength_pred
+```
+
+## Step 5: Improving model performance
+Given that we only used one hidden node, it is likely that we can improve the performance of our model using more hidden nodes.
+
+A more complex neural network topology with 5 hidden neurons
+```{r}
+set.seed(12345) # to guarantee repeatable results
+concrete_model2 <- neuralnet(strength ~ cement + slag +
+                               ash + water + superplastic + 
+                               coarseagg + fineagg + age,
+                               data = concrete_train, hidden = 5, act.fct = "logistic")
+```
+We use the neuralnet() function as before, but add the hidden = 5 parameter
+
+Plot the network
+```{r}
+plot(concrete_model2)
+```
+Notice that the reported error (measured again by SSE) has been reduced from 5.08 in the previous model to 1.63 here. Additionally, the number of training steps rose from 4,882 to 86,849.
+
+Plotnet
+```{r}
+par(mar = numeric(4), family = 'serif')
+plotnet(concrete_model2, alpha = 0.6)
+```
+Evaluate the results as we did before
+```{r}
+model_results2 <- compute(concrete_model2, concrete_test[1:8])
+predicted_strength2 <- model_results2$net.result
+cor(predicted_strength2, concrete_test$strength) 
+```
+We now obtain a correlation around 0.92, which is a considerable improvement over the previous result of 0.80 with a single hidden node.
+
+Try different activation function
+A more complex neural network topology with 5 hidden neurons
+```{r}
+set.seed(12345) # to guarantee repeatable results
+concrete_model2 <- neuralnet(strength ~ cement + slag +
+                               ash + water + superplastic + 
+                               coarseagg + fineagg + age,
+                             data = concrete_train, hidden = 5, act.fct = "tanh")
+```
+act.fc here in the neuralnet() function is a differentiable function that is used for smoothing the result of the cross product of the covariate or neurons and the weights. Additionally the strings, 'logistic' and 'tanh' are possible for the logistic function and tangent hyperbolicus.
+
+Evaluate the results as we did before
+```{r}
+model_results2 <- compute(concrete_model2, concrete_test[1:8])
+predicted_strength2 <- model_results2$net.result
+cor(predicted_strength2, concrete_test$strength)  
+```
+The correlation is worse than our first activation function.
+
+
+
+
+
+
+
+
+

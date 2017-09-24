@@ -1,0 +1,162 @@
+
+
+3. Perform the Association analysis on the groceries analysis letter data. Produce a report explaining the data, the analysis, and the findings.
+Organize you report using the Five Steps
+
+# Step 1 - collecting data
+The market basket analysis will utilize the purchase data collected from one month of operation at a real-world grocery store. The data contains 9,835 transactions or about 327 transactions per day (roughly 30 transactions per hour in a 12-hour business day), suggesting that the retailer is not particularly large, nor is it particularly small. 
+Given the moderate size of the retailer, we will assume that they are not terribly concerned with finding rules that apply only to a specific brand of milk or detergent. so all brand names can be removed from the purchases. This reduces the number of groceries to a more manageable 169 types, using broad categories such as chicken, frozen meals, margarine, and soda.
+
+# Step 2: Exploring and preparing the data
+
+##Import groceries dataset in our previous way
+```{r}
+data<-read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml13/groceries.csv")
+head(data)
+```
+
+Look at the groceries dataset. Two problems: First, R create four variables in the first line because the first line had exactly four comma-separated values. However, we know that grocery purchases can contain more than four items; in the four column design such transactions will be broken across multiple rows in
+the matrix. We could try to remedy this by putting the transaction with the largest number of items at the top of the file, but this ignores another more problematic issue. 
+
+By structuring data this way, R has constructed a set of features that record not just the items in the transactions, but also the order in which they appear. If we imagine our learning algorithm as an attempt to find a relationship among V1, V2, V3, and V4, then whole milk in V1 might be treated differently than the whole milk appearing in V2. Instead, we need a dataset that does not treat a transaction as a set of positions to be filled (or not filled) with specific items, but rather as a market basket that either contains or does not contain each particular item.
+
+The solution to this problem utilizes a data structure called a sparse matrix.*A sparse matrix or sparse array is a matrix in which most of the elements are zero, which means it does not actually store the full matrix in memory; but only stores the cells that are occupied by an item.* Each row in the sparse matrix indicates a transaction. However, the sparse matrix has a column (that is, feature) for every item that could possibly appear in someone's shopping bag. Since there are 169 different items in our grocery store data, our sparse matrix will contain 169 columns.
+ 
+## Data preparation - creating a sparse matrix for transaction data
+## Import groceries dataset into Rstudio by creating a sparse matrix
+```{r}
+library(arules)
+groceries <- read.transactions("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml13/groceries.csv", sep = ",")
+summary(groceries)
+```
+Since we're loading the transactional data, we cannot simply use the read.csv() function used previously. Instead, arules package provides a read.transactions() function that is similar to read.csv() with the exception that it results in a sparse matrix suitable for transactional data. The sep = "," parameter specifies that items in the input file are separated by a comma.
+
+The output 9835 rows refers to the number of transactions, and the output 169 columns refers to the 169 different items that might appear in someone's grocery basket. Each cell in the matrix is 1 if the item was purchased for the corresponding transaction, or 0 otherwise.
+
+The density value of 0.02609146 (2.6 percent) refers to the proportion of nonzero matrix cells. Since there are 9,835 * 169 = 1,662,115 positions in the matrix, we can calculate that a total of 1,662,115 * 0.02609146 = 43,367 items were purchased during the store's 30 days of operation (ignoring the fact that duplicates of the same items might have been purchased).
+
+The next block of the summary() output lists the items that were most commonly found in the transactional data. Since 2,513 / 9,835 = 0.2555, we can determine that whole milk appeared in 25.6 percent of the transactions.
+
+Finally, we are presented with a set of statistics about the size of the transactions. A total of 2,159 transactions contained only a single item, while one transaction had 32 items.
+
+## look at the first five transactions
+```{r}
+inspect(groceries[1:5])
+```
+To look at the contents of the sparse matrix, use the inspect() function in combination with the vector operators.
+
+## examine the frequency of items
+```{r}
+itemFrequency(groceries[, 1:3])
+```
+Using this with the itemFrequency() function allows us to see the proportion of transactions that contain the item- support level for the items.
+The outputs show that Abrasive cleaner and artificial sweeteners are found in about 0.3 percent of the transactions, while baby cosmetics are found in about 0.06 percent of the transactions.
+
+## Visualizing item support - item frequency plots
+## plot the frequency of items
+```{r}
+itemFrequencyPlot(groceries, support = 0.1)
+itemFrequencyPlot(groceries, topN = 20)
+```
+We use itemFrequencyPlot() with the support parameter equals 0.1 to require these items to appear in a minimum proportion of transactions.
+The topN parameter can be used with itemFrequencyPlot() to limit the plot to a specific number of items.The histogram is then sorted by decreasing support, as shown in the second diagram of the top 20 items in the groceries data.
+
+##Visualizing the transaction data - plotting the sparse matrix
+## a visualization of the sparse matrix for the first five transactions
+```{r}
+image(groceries[1:5])
+```
+We use the image() function to display the sparse matrix for the first five transactions. The resulting diagram depicts a matrix with 5 rows and 169 columns, indicating the 5 transactions and 169 possible items we requested. Cells in the matrix are filled with black for transactions (rows) where the item (column) was purchased.
+
+## visualization of a random sample of 100 transactions
+```{r}
+image(sample(groceries, 100))
+```
+A few columns seem fairly heavily populated, indicating some very popular items at the store. But overall, the distribution of dots seems fairly random.
+
+# Step 3: Training a model on the data
+We will use apriori() function to train the model.Although running the apriori() function is straightforward, there can sometimes be a fair amount of trial and error needed to find the support and confidence parameters that produce a reasonable number of association rules.
+
+In this case, if we attempt to use the default settings of support = 0.1 and confidence = 0.8, we will end up with a set of zero rules.
+## default settings result in zero rules learned
+```{r}
+library(arules)
+apriori(groceries)
+```
+The outputs can be explained.Because support = 0.1 by default, in order to generate a rule, an item must have appeared in at least 0.1 * 9,385 = 938.5 transactions. Since only eight items appeared this frequently in our data, it's no wonder that we didn't find any rules.
+
+## set better support and confidence levels to learn more rules
+```{r}
+groceryrules <- apriori(groceries, parameter = list(support =
+                          0.006, confidence = 0.25, minlen = 2))
+groceryrules
+```
+One way to approach the problem of setting a minimum support threshold is to think about the smallest number of transactions you would need before you would consider a pattern interesting. For instance, if you are interested in a pattern of item purchased twice a day(60 times a month), we can calculate the support level equals 60/9835=0.006.
+
+For confidence threshold, We'll start with 0.25, which means that in order to be included in the results, the rule has to be correct at least 25 percent of the time.
+
+minlen specifies the minimum required rule items. In addition to the minimum support and confidence parameters, it is helpful to set minlen = 2 to eliminate rules that contain fewer than two items.
+
+The outputs show that our groceryrules object contains a set of 463 association rules. To determine whether any of them are useful, we'll have to dig deeper.
+
+# Step 4: Evaluating model performance
+## summary of grocery association rules
+```{r}
+summary(groceryrules)
+```
+The rule length distribution tells us how many rules have each count of items. In our rule set, 150 rules have only two items, while 297 have three, and 16 have four.The size of the rule is calculated as the total of both the left-hand side (lhs) and right-hand side (rhs) of the rule. This means that a rule like {bread} ??? {butter} is two items and {peanut butter, jelly} ??? {bread} is three.
+
+Next, we see the summary statistics of the rule quality measures: support, confidence, and lift.We might be alarmed if most or all of the rules had support and confidence very near the minimum thresholds, as this would mean that we may have set the bar too high.This is not the case here, as there are many rules with much higher values of each.
+
+The lift of a rule measures how much more likely one item or itemset is purchased relative to its typical rate of purchase, given that you know another item or itemset has been purchased. A large lift value is a strong indicator that a rule is important, and reflects a true connection between the items.
+
+## look at the first three rules
+```{r}
+inspect(groceryrules[1:3])
+```
+The first rule said "if a customer buys potted plants, they will also buy whole milk." With support of 0.007 and confidence of 0.400,
+we can determine that this rule covers 0.7 percent of the transactions and is correct in 40 percent of purchases involving potted plants. The lift value tells us how much more likely a customer is to buy whole milk relative to the average customer, given that he or she bought a potted plant.
+
+# Step 5: Improving model performance
+Sorting the set of association rules
+The most useful rules might be the ones with the highest support, confidence, or lift. The arules] package includes a sort() function that can be used to reorder the list of rules so that the ones with the highest or lowest values of the quality measure come first.
+## sorting grocery rules by lift
+```{r}
+inspect(sort(groceryrules, by = "lift")[1:5])
+```
+This command gives the best five rules according to the lift statistic.
+The first rule, with a lift of about 3.96, implies that people who buy herbs are nearly four times more likely to buy root vegetables than the typical customer.
+
+Taking subsets of association rules
+The subset() function provides a method to search for subsets of transactions, items, or rules.
+## finding subsets of rules containing any berry items
+```{r}
+berryrules <- subset(groceryrules, items %in% "berries")
+inspect(berryrules)
+```
+The keyword items explained previously, matches an item appearing anywhere in the rule. To limit the subset to where the match occurs only on the left- or right-hand side, use lhs and rhs instead.
+The operator %in% means that at least one of the items must be found in the list you defined. If you want any rules matching either berries or yogurt, you could write items %in%c("berries", "yogurt").
+
+Additional operators are available for partial matching (%pin%) and complete matching (%ain%). Partial matching allows you to find both citrus fruit and tropical fruit using one search: items %pin% "fruit". Complete matching requires that all the listed items are present. For instance, items %ain% c("berries", "yogurt") finds only rules with both berries and yogurt.
+
+Saving association rules to a file or data frame
+## writing the rules to a CSV file
+```{r}
+write(groceryrules, file = "groceryrules.csv",
+      sep = ",", quote = TRUE, row.names = FALSE)
+```
+
+## converting the rule set to a data frame
+```{r}
+groceryrules_df <- as(groceryrules, "data.frame")
+str(groceryrules_df)
+```
+This creates a data frame with the rules in the factor format, and numeric vectors for support, confidence, and lift.
+
+
+
+
+
+
+
+

@@ -1,0 +1,292 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+Qingying Li (Flora), Stat6610, HW5, Session 2
+
+
+1. Perform the Linear Regression analysis of the insurance data. Produce a report using an Rnotebook explaining the data, the analysis, and the findings.
+Organize you report using the Five Steps.
+Read Chapter 3, Sections 1, 2, 3, and 4, of An Introduction to Statistical Learning book. Run the code from the Chapter Lab Sections 3.6.2 and 3.6.3
+
+##Step 1 - collecting data
+We use a simulated dataset containing hypothetical medical expenses for patients in the United States. This data was created using demographic statistics from the US Census Bureau, and thus, approximately reflect real-world conditions. The insurance dataset includes 1,338 examples of beneficiaries currently enrolled in the insurance plan, with features indicating characteristics of the patient as well as the total medical expenses charged to the plan for the calendar year. The features include: age, sex, bmi, children, smoker, region.
+
+##Step 2 - exploring and preparing the data
+
+Import insurance dataset into Rstudio
+```{r}
+insurance <- read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml10/insurance.csv", stringsAsFactors = TRUE)
+str(insurance)
+```
+We copy the link address and paste it into the read.csv() function to get the dataset directly from the website.We can safely use stringsAsFactors = TRUE because it is appropriate to convert the three nominal variables to factors.
+
+We can see the dataset contains 1338 observations and 7 variables.
+
+Prior to building a regression model, it is often helpful to check for normality. Although linear regression does not strictly require a normally distributed dependent variable, the model often fits better when this is true.
+
+Summarize the charges variable
+```{r}
+summary(insurance$expenses)
+```
+Because the mean value is greater than the median, this implies that the distribution of insurance expenses is right-skewed. We can confirm this visually using a histogram.
+
+Histogram of insurance charges
+```{r}
+hist(insurance$expenses)
+```
+The histogram shows the right-skewness of the data. It also shows that the majority of people in our data have yearly medical expenses between zero and $15,000, in spite of the fact that the tail of the distribution extends far past these peaks.
+
+A problem: Regression models require that every feature is numeric. Here, we have three factor-type data features,sex, smoker and region.
+
+Take a closer look at the region variable.
+Table of region
+```{r}
+table(insurance$region)
+```
+We can see that the data has been divided nearly evenly among four geographic regions.
+
+Exploring relationships among features - the correlation matrix
+```{r}
+cor(insurance[c("age", "bmi", "children", "expenses")])
+```
+At the intersection of each row and column pair, the correlation is listed for the variables indicated by that row and column.
+
+None of the correlations in the matrix are considered strong,but there are some notable associations.For instance, the positive correlations between expenses and age,bmi,children indicate that as age, body mass, and number of children increase, the expected cost of insurance goes up.
+
+Visualing relationships among features: scatterplot matrix
+```{r}
+pairs(insurance[c("age", "bmi", "children", "expenses")])
+```
+The pairs() function provides basic functionality for producing scatterplot matrices.
+
+Look at the outputs, the relationship between age and expenses displays several relatively straight lines, while the bmi versus expenses plot has two distinct groups of points. It is difficult to detect trends in any of the other plots.
+
+More informative scatterplot matrix
+```{r}
+library(psych)
+pairs.panels(insurance[c("age", "bmi", "children", "expenses")])
+```
+An enhanced scatterplot matrix can be created with the pairs.panels() function in the psych package.
+
+Above the diagonal, the scatterplots have been replaced with a correlation matrix. On the diagonal, a histogram depicting the distribution of values for each feature is shown. Finally, the scatterplots below the diagonal are now presented with additional visual information.
+
+The oval-shaped object on each scatterplot is a correlation ellipse. It provides a visualization of correlation strength. The dot at the center of the ellipse indicates the point at the mean values for the x and y axis variables. The correlation between the two variables is indicated by the shape of the ellipse; the more it is stretched, the stronger the correlation. An almost perfectly round oval, as with bmi and children, indicates a very weak correlation (in this case, it is 0.01).
+
+The curve drawn on the scatterplot is called a loess curve. It indicates the general relationship between the x and y axis variables.For example, as to the upside-down loess curve for age and chidlren, peaking in the middle age, which means that the youngest and oldest people in the sample have fewer childern on the insurance plan than those around middle age. Because this trend is non-linear, this finding could not have been inferred from the correlations alone.
+
+##Step 3 - training a model on the data
+
+Fit a linear regression model to data with R
+```{r}
+ins_model <- lm(expenses ~ age + children + bmi + sex + smoker + region,
+                data = insurance)
+ins_model <- lm(expenses ~ ., data = insurance) 
+```
+The linear regression lm() function is included in the stats package. The . character can be used to specify all the features (excluding those already specified in the formula). The two ins_models are equivalent.
+
+See the estimated beta coefficients
+```{r}
+ins_model
+```
+The intercept is the predicted value of expenses when the independent variables are equal to zero, but here since some independent variables (eg. age, bmi) have no meanings at zero, so the intercept has no real-world interpretation.
+
+The beta coefficients indicate the estimated increase in expenses for an increase of one in each of the features, assuming all other values are held constant.For instance, for each additional year of age, there will be $256.8 higher medical expenses on average, assuming everything else is equal.
+
+In addition, the lm() function automatically applied a technique known as dummy coding to each of the factor-type variables we included in the model, here are sex, smoker and region. The dummy variable is set to 1 if the observation falls into the specified category or 0 otherwise.
+
+When adding a dummy variable to a regression model, one category is always left out to serve as the reference category. The estimates are then interpreted relative to the reference. In our model, R automatically held out the sexfemale, smokerno, and regionnortheast variables, making female non-smokers in the northeast region the reference group. So male spend $131.4 less medical expenses than female, smokerse spend $23847.5 more medical expenses than non-smokers on average. And people from region northeast tends to have the highest average medical expenses. 
+
+##Step 4 - evaluating model performance
+See more details about the estimated beta coefficients
+```{r}
+summary(ins_model)
+```
+The residuals section provides summary statistics for the errors in our predictions. Since the residual is the true value minus predicted value, the maximum error of 29981.7 suggests that the model under-predicted expenses by nearly $30,000 for at least one observation. 
+
+P-value in the coefficients table provides an estimate of the probability that the true coefficient is zero given the value of the estimate. In our model, we can see that p-values of sexmale and regionnorthwest are big, indicating that these two features are likely to have no relationship with the dependent variables.
+
+R-squared of 0.7494 means that the model explains nearly 75 percent of the variation in the dependent variable. Because models with more features always explain more variation, the adjusted R-squared value corrects R-squared by penalizing models with a large number of independent variables. It is useful for comparing the performance of models with different numbers of explanatory variables.
+
+##Step 5 - improving model performance
+
+Model specification - adding non-linear relationships
+Add a higher-order "age" term
+We add the "age" term here because the effect of age on medical expenditure may not be constant throughout all the age values; the treatment may become disproportionately expensive for oldest populations.
+
+To add the non-linear age to the model, we simply need to create a new variable:
+```{r}
+insurance$age2<-insurance$age^2
+```
+
+Transformation - converting a numeric variable to a binary indicator
+Suppose that one feature has an effect only after a specific threshold has been reached. For example, BMI may not have an effect on medical expenses within a normal weight range, but it may be strongly related to higher costs for the obese (that is, BMI of 30 or above).
+
+We can model this relationship by creating a binary obesity indicator variable that is 1 if the BMI is at least 30, and 0 if less.
+
+Add an indicator for BMI >= 30
+```{r}
+insurance$bmi30 <- ifelse(insurance$bmi >= 30, 1, 0)
+```
+The ifelse() function, for a specified condition, returns a value depending on whether the condition is true or false. Here, the function returns 1 if bmi>=30, otherwise returns 0.
+
+Model specification - adding interaction effects
+
+When two features have a combined effect, this is known as an interaction. Interaction effects are specified using the R formula syntax. To have the obesity indicator (bmi30) and the smoking indicator (smoker) interact, we would write a formula in the form expenses ~ bmi30*smoker. 
+
+The * operator is shorthand that instructs R to model expenses ~ bmi30 + smokeryes + bmi30:smokeryes. So bmi30*smoker include the individual effects of bmi, smoker and also the interaction between bmi and smoker.
+
+Putting it all together - an improved regression model
+create final model
+```{r}
+ins_model2 <- lm(expenses ~ age + age2 + children + bmi + sex +
+                   bmi30*smoker + region, data = insurance)
+
+summary(ins_model2)
+```
+The adjusted model improves.We can see that the R-squared increases from 75% to 87%, indicating that the independent variables now included in the model explain 87% of the dependent variable. Also, we can see the age2 and bmi become statistically significant. The first order age feature is not statistically significant now. The interaction between bmi and smokers suggests a massive effect; in addition to the increased costs of over $13,404 for smoking alone, obese smokers spend another $19,810 per year.
+
+#An Introduction to Statistical Learning
+
+##3.6.2 Simple Linear Regression
+Collect data
+Use Boston data set in MASS library. The dataset records medv (median house value) for 506 neighborhoods around Boston. We will seek to predict medv using 13 predictors such as rm (average number of rooms per house), age (average age of houses), and lstat (percent of households with low socioeconomic status).
+
+```{r}
+library(MASS)
+fix(Boston)
+names(Boston)
+```
+fix() invokes edit on x and then assigns the new (edited) version of x in the user's workspace.
+names() functions to get or set the name of an object.
+
+Fit a linear regression model
+We use lm() for linear regression model. The basic syntax is lm(y~x,data)
+```{r}
+lm.fit =lm(medv~lstat,Boston)
+```
+or we can attache the dataset Boston, so that R knows when to find the variables.
+```{r}
+attach (Boston)
+lm.fit =lm(medv~lstat)
+summary(lm.fit)
+```
+Use the summary function, we can get more information about the dataset. The R-squared is 0.54, indicating that lstat (percent of households with low socioeconomic status) explains 54% of the response variable medv (median house value). The p-values of intercept and lstat are small enough to reject the null hypothesis, indicating the parameters are significantly different zero.
+
+Find other information and coefficients
+```{r}
+names(lm.fit)
+coef(lm.fit)
+```
+We use the names() function in order to find out what other pieces of information are stored in lm.fit.
+coef() function show the  coefficients of intercept and lstat in the model.
+
+Obtain a confidence interval for the coefficient estimates
+```{r}
+confint(lm.fit)
+```
+By default, the confint() gives us the 95% level of confidence interval for intercept and lstat.
+
+Prediction and confidence intervals for a given value
+```{r}
+predict (lm.fit ,data.frame(lstat=c(5 ,10 ,15) ),
+interval ="confidence")
+predict (lm.fit ,data.frame(lstat=c(5 ,10 ,15) ),
+interval ="prediction")
+```
+The predict() function can be used to produce confidence intervals and prediction intervals for the prediction of medv for a given value of lstat.
+
+Here, the 95% (by default) confidence interval associated with a lstat value of 10 is (24.47, 25.63), and the 95% prediction interval is (12.828, 37.28).The confidence and prediction intervals are centered around the same point (a predicted value of 25.05 for medv when lstat equals 10), but the latter are substantially wider.
+
+Plot dependent and independent variables
+```{r}
+attach (Boston)
+lm.fit =lm(medv~lstat)
+plot(lstat,medv)
+abline (lm.fit)
+```
+Also, we use abline() function to add a least squares regression line.We can see that there is some evidence for non-linearity in the relationship between lstat and medv.
+
+More use of abline() function
+```{r}
+plot(lstat,medv)
+abline (lm.fit)
+abline(lm.fit,lwd =3)
+abline (lm.fit,lwd =3, col ="red ")
+plot(lstat ,medv ,col ="red ")
+plot(lstat ,medv ,pch =20)
+plot(lstat ,medv ,pch ="+")
+plot (1:20 ,1:20, pch =1:20)
+```
+The abline() function can be used to draw any line, not just the least squares regression line.To draw a line with intercept a and slope b, we type abline(a,b). The lwd=3 command causes the width of the regression line to be increased by a factor of 3. We can also use the pch option to create different plotting symbols.*why??*******
+
+Review all plots together
+```{r}
+par(mfrow =c(2,2))
+plot(lm.fit)
+```
+We can achieve by using the par() function, which tells R to split the display screen into separate panels so that multiple plots can be viewed simultaneously.
+plot(lm.fit) include residuals vs.fitted values, QQ-plot,standardized residuals vs.fitted values, standardized residuals vs.leverrage. 
+
+Compute residuals, return studentizezd residuals
+```{r}
+plot(predict (lm.fit), residuals (lm.fit))
+plot(predict (lm.fit), rstudent (lm.fit))
+```
+On the basis of the residual plots, there is some evidence of non-linearity.
+
+Compute leverage statistics
+```{r}
+plot(hatvalues (lm.fit ))
+which.max (hatvalues (lm.fit))
+```
+hatvalues() function can do the leverage statistics. The which.max() function identifies the index of the largest element of a vector. In this case, it tells us which observation has the largest leverage statistic,here is the 375 observation. *question: does it mean the observation on the row 375?*
+
+##3.6.3 Multiple Linear Regression
+Fit the multiple linear regression model
+```{r}
+lm.fit =lm(medv~lstat+age ,data=Boston)
+summary(lm.fit)
+```
+The predictors are lstat and age, the response variable is medv. 
+
+Include all the predictors in the dataset
+```{r}
+lm.fit =lm(medv~.,data=Boston )
+summary(lm.fit)
+```
+Now, the R-squared is 0.73, indicating that all the predictors together can explain 73% of the dependent variale medv. The RSE is 4.745, indicating that the average amount that the median house value will deviate from the true regression line is 4.745.
+
+Compute variance inflation factors
+```{r}
+library(car)
+vif(lm.fit)
+```
+As a rule of thumb, a VIF value that exceeds 5 or 10 indicates a problematic amount of collinearity. Based on the outputs, collinearity exits in rad and tax. 
+
+Preform a regression exclude one variable
+```{r}
+lm.fit1=lm(medv~.-age ,data=Boston )
+summary(lm.fit1)
+```
+The age predictor has a high p-value, so here we excludes age and do the regression.
+
+Alternatively, the update() function can be used to exclude age.
+```{r}
+lm.fit1=update(lm.fit , ~.-age)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

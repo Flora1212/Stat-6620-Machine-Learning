@@ -1,0 +1,111 @@
+
+
+2. Perform the Logistic Regression analysis of the credit data. Produce a report using an Rnotebook explaining the data, the analysis, and the findings.
+Organize you report using the Five Steps.
+
+# Step 1 - collecting data
+We use the credit dataset to predict whether someone will default. There are 16 predictors including checking_balance, credit_history etc.
+
+# Step 2 - exploring and preparing the data
+##Import credit dataset into Rstudio
+```{r}
+credit<-read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml7/credit.csv")
+str(credit)
+```
+From the outputs we can see that credit dataset includes 1000 observations and 17 variables.
+
+To use the logistic regression model, first we need to fix the default variable to be 0 or 1.
+```{r}
+credit$default = as.numeric(credit$default)
+credit$default = credit$default - 1
+```
+
+##examine the fixed data
+```{r}
+str(credit)
+```
+We can see that the default variable changes from factor to number with two levels -1 and 0.
+
+##Set up trainning and test data sets
+```{r}
+set.seed(123)
+indx = sample(1:nrow(credit), as.integer(0.9*nrow(credit)))
+
+credit_train = credit[indx,]
+credit_test = credit[-indx,]
+
+credit_train_labels = credit[indx,17]
+credit_test_labels = credit[-indx,17]  
+```
+We split the 90% dataset as the training data and 10% as the testing data.
+
+
+##Check if there are any missing values
+```{r}
+library(Amelia)
+missmap(credit, main = "Missing values vs observed")
+```
+The map shows there is no missing data in the credit dataset.
+
+##number of missing values in each column
+```{r}
+sapply(credit,function(x) sum(is.na(x)))
+```
+This commond also shows that there is no missing values in each column.
+
+##number of unique values in each column
+```{r}
+sapply(credit, function(x) length(unique(x)))
+```
+
+# Step 3 - training a model on the data
+##fit the logistic regression model, with all predictor variables
+```{r}
+model <- glm(default ~.,family=binomial(link='logit'),data=credit_train)
+model
+
+summary(model)
+
+anova(model, test="Chisq")
+```
+The anova() results show that checking_balance, months_loan_duration, credit_history, savings_balance, employment_duration, percent_of_income, age, other_credit and housing are the significant predictors for default when alpha=0.1.
+
+# Step 4&5- improving and evaluating model performance 
+##drop the insignificant predictors, alpha = 0.10
+We drop the insignificant predictors and rerun the logistic regression model.
+```{r}
+model <- glm(default ~ checking_balance + months_loan_duration + savings_balance + employment_duration + credit_history +  percent_of_income + age + housing, family=binomial(link='logit'),data=credit_train)
+model
+
+summary(model)
+
+anova(model, test="Chisq")
+```
+The outputs show that AIC decreases from 921.4 to 911.4, and all predictors become significant except age.
+
+##check Accuracy on the improved model
+```{r}
+fitted.results <- predict(model,newdata=credit_test,type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+misClasificError <- mean(fitted.results != credit_test$default)
+print(paste('Accuracy',1-misClasificError))
+```
+We can see that the prediction accuracy for the improved model is 74%.
+
+##ROC and auc
+```{r}
+library(ROCR)
+p <- predict(model, newdata=credit_test, type="response")
+pr <- prediction(p, credit_test$default)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+We get an auc of 0.75, combined with the graph of ROC, indicating the model has a relatively good predictive ability.
+
+
+

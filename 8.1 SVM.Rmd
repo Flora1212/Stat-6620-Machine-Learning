@@ -1,0 +1,92 @@
+
+
+1.Perform the SVM analysis on the OCR analysis letter data. Produce a report explaining the data, the analysis, and the findings. Using an Rnotebook.
+Organize you report using the Five Steps.
+
+*SVMs can be adapted for use with nearly any type of learning task, including both classification and numeric prediction, and are most easily understood when used for binary classification.*
+
+# Step 1 - collecting data
+We use a dataset donated to the UCI Machine Learning Data Repository by W. Frey and D. J. Slate. The dataset contains 20,000 examples of 26 English alphabet capital letters as printed using 20 different randomly reshaped and distorted black and white fonts.They are easily recognized by a human being, but are challenging for a computer.
+
+# Step 2 - exploring and preparing the data
+#read in data and examine structure
+```{r}
+letters <- read.csv("http://www.sci.csueastbay.edu/~esuess/classes/Statistics_6620/Presentations/ml11/letterdata.csv")
+str(letters)
+```
+The outputs show that the data have 16 features that define each example of the letter class. As expected, letter has 26 levels.
+
+Recall that SVM learners require all features to be numeric, and moreover, that each feature is scaled to a fairly small interval. We can see that all the features in this case are all numbers, and we also don't need to normalize or standardize the data because the R package that we will use for fitting the SVM model will perform the rescaling automatically.
+
+#divide into training and test data
+We use the first 16,000 records (80 percent) to build the model and the next 4,000 records (20 percent) to test.
+```{r}
+letters_train <- letters[1:16000, ]
+letters_test  <- letters[16001:20000, ]
+```
+
+# Step 3: Training a model on the data
+#begin by training a simple linear SVM
+```{r}
+library(kernlab)
+letter_classifier <- ksvm(letter ~ ., data = letters_train,
+                          kernel = "vanilladot")
+```
+We call the ksvm() function on the training data and specify the linear (that is, vanilla) kernel using the vanilladot option.
+
+#look at basic information about the model
+```{r}
+letter_classifier
+```
+This information tells us very little about how well the model will perform in the real world. We'll need to examine its performance on the testing dataset to know whether it generalizes well to unseen data.
+
+# Step 4: Evaluating model performance
+#predictions on testing dataset
+```{r}
+letter_predictions <- predict(letter_classifier, letters_test)
+head(letter_predictions)
+table(letters_test$letter, letter_predictions)
+```
+The predict() function allows us to use the letter classification model to make predictions on the testing dataset.
+
+Because we didn't specify the type parameter, the type = "response" default was used. This returns a vector containing a predicted letter for each row of values in the test data. Using the head() function, we can see that the first six predicted letters were U, N, V, X, N, and H.
+
+To examine how well our classifier performed, we need to compare the predicted letter to the true letter in the testing dataset. We use the table() function for this purpose.The diagonal values of 144, 121, 120, 156, and 127 indicate the total number of records where the predicted letter matches the true value.
+*question: the row or the column is the predictions?*
+
+#look only at agreement vs. non-agreement
+#construct a vector of TRUE/FALSE indicating correct/incorrect predictions
+```{r}
+agreement <- letter_predictions == letters_test$letter
+table(agreement)
+prop.table(table(agreement))
+```
+The above command returns a vector of TRUE or FALSE values, indicating whether the model's predicted letter agrees with (that is, matches) the actual letter in the test dataset.Using the table() function, we see that the classifier correctly identified the letter in 3,357 out of the 4,000 test records.In percentage terms, the accuracy is about 84%.
+
+
+# Step 5: Improving model performance
+Our previous SVM model used the simple linear kernel function. By using a more complex kernel function, we can map the data into a higher dimensional space, and potentially obtain a better model fit.A popular convention is to begin with the Gaussian RBF kernel, which has been shown to perform well for many types of data.
+```{r}
+set.seed(12345)
+letter_classifier_rbf <- ksvm(letter ~ ., data = letters_train, kernel = "rbfdot")
+letter_predictions_rbf <- predict(letter_classifier_rbf, letters_test)
+
+table(letters_test$letter, letter_predictions_rbf)
+
+agreement_rbf <- letter_predictions_rbf == letters_test$letter
+table(agreement_rbf)
+prop.table(table(agreement_rbf))
+```
+By changing the kernel function, we improve the prediction accuracy from 84% to 93%. We can also try other kernels, or the cost of constraints parameter C could be varied to modify the width of the decision boundary.
+
+
+
+
+
+
+
+
+
+
+
+

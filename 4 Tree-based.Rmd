@@ -1,0 +1,168 @@
+
+# Step 1 - Collecting data
+
+We use the credit dataset from UCI Machine Learning Data Repository (http://archive.ics.uci.edu/ml) by Hans Hofmann of the University of Hamburg. The dataset contains information on loans obtained from a credit agency in Germany. It includes 1,000 examples on loans, plus a set of numeric and nominal features indicating the characteristics of the loan and the loan applicant. A class variable indicates whether the loan went into default.
+
+# Step 2 - exploring and preparing the data
+## Import dataset into Rstudio
+```{r}
+credit<-read.csv("credit.csv")
+str(credit)
+```
+
+We ignore the stringsAsFactors option and, therefore, use the default value of TRUE, as the majority of the features in the data are nominal.
+
+We can see that this dataset has 1000 observations and 17 features, which are a combination of factor and integer data types.
+
+## look at two characteristics of the applicant
+```{r}
+table(credit$checking_balance)
+table(credit$savings_balance)
+```
+## look at two characteristics of the loan
+```{r}
+summary(credit$months_loan_duration)
+summary(credit$amount)
+```
+The months of loan duration is from 4 months to 72 months, while loan amount is from 250 DM to 18,420 DM.
+
+## look at the class variable
+```{r}
+table(credit$default)
+```
+The default vector indicates whether the loan applicant went into default. 30% of the loans in this dataset went into default.
+
+# Data preparation - creating random training and test datasets
+## create a random sample for training and test data
+## use set.seed to use the same random number sequence as the tutorial
+```{r}
+set.seed(123)
+train_sample<-sample(1000,900)
+str(train_sample)
+```
+Here, we solve the problem by using a random sample of the credit data for training. 
+First, we set a seed value, which causes the randomization process to follow a sequence that can be replicated later on if desired. Every time we set.seed(123), R will generate the same random sequence.
+Then, the sample() function is to select 900 values at random out of the sequence of integers from 1 to 1000. So the train sample contains 900 values of data.
+
+## split the data frames
+```{r}
+credit_train <- credit[train_sample, ]
+credit_test  <- credit[-train_sample, ]
+```
+We split and create the train and test dataset. The train dataset contains the previous train_sample data, and the dash operator used in the selection of the test records tells R to select records that are not
+in the specified rows; in other words, the test data includes only the rows that are not in the training sample.
+
+## check the proportion of class variable
+```{r}
+prop.table(table(credit_train$default))
+prop.table(table(credit_test$default))
+```
+The probabilities of default and not default for train and test data are close, with around 30% default, which is similar to the default rate of the whole dataset. So the split is representative and we can now build our decision tree.
+
+Step 3 - training a model on the data
+We will use the C5.0 algorithm in the C50 package to train our decision tree model.
+
+## build the simplest decision tree
+```{r}
+library(C50)
+credit_model<-C5.0(credit_train[-17], credit_train$default)
+```
+The 17th column in credit_train is the default class variable, so we need to exclude it from the training data frame, but supply it as the target factor vector for classification.
+
+The credit_model object now contains a C5.0 decision tree.
+
+## display simple facts about the tree
+```{r}
+credit_model
+```
+The results show the number of features(labeled predictors) and number of example(labeled samples).
+Also listed is the tree size of 57, which indicates that the tree is 57 decisions deep.
+
+## display detailed information about the tree
+```{r}
+summary(credit_model)
+```
+We use the summary() function to get the detailed decision tree. To explain it,the first row shows that when checking balance is higher than 200DM or unknow, then classify as "not likely to default". 
+
+The numbers in parentheses indicate the number of examples meeting the criteria for that decision, and the number incorrectly classified by the decision. For instance, on the first line, 412/50 indicates that of the 412 examples reaching the decision, 50 were incorrectly classified as not likely to default. In other words, 50 applicants actually defaulted.
+
+After the tree, the summary(credit_model) output displays a confusion matrix.
+
+The Errors output notes that the model correctly classified all but 133 of the 900 training instances for an error rate of 14.8%, and accuracy rate is 85%. A total of 35 actual no values were incorrectly classified as yes (false positives), while 98 yes values were misclassified as no (false negatives).
+
+Decision trees are known for having a tendency to overfit the model to the training data. For this reason, the error rate reported on training data may be overly optimistic.
+
+# Step 4 - evaluating model performance
+## create a factor vector of predictions on test data
+```{r}
+credit_pred <- predict(credit_model, credit_test)
+```
+We use the predict() function to apply our decision tree model to the test dataset.
+
+## cross tabulation of predicted versus actual classes
+```{r}
+library(gmodels)
+CrossTable(credit_test$default,credit_pred,prop.chisq = FALSE,prop.c = FALSE,prop.r = FALSE,
+           dnn=c('actual default','predicted default'))
+```
+We compare the predicted class values to actual class values using the CorssTable() function in the gmodels package. The remaining percentage (prop.t) indicates the proportion of records in the cell out of the total number of records.
+
+The confusion matrix shows that the decision tree model correctly predicts 59 not defaults and 14 defaults.
+The prediction accuracy=(59+14)/100=73%. However, there are 8 false positive (predict yes but actual no) and 19 false negative (predicte no but actual yes). The prediction accurary is not ideal, and the false negative percentage is too high and this error can lead to big loses for the banks. So we will try to improve the prediction accuracy of the model.
+
+# Step 5 - improving model performance
+## Boosting the accuracy of decision trees
+## boosted decision tree with 10 trials
+Boosting is by combining a number of weak performing learners, you can create a team that is much stronger
+than any of the learners alone.Using a combination of several learners with complementary strengths and weaknesses can dramatically improve the accuracy of a classifier.
+
+We add an additional trials parameter indicating the number of separate decision trees to use in the boosted team. The trials parameter sets an upper limit; the algorithm will stop adding trees if it recognizes that additional trials do not seem to be improving the accuracy. We'll start with 10 trials, a number that has become the de facto standard.
+
+```{r}
+credit_boost10 <- C5.0(credit_train[-17], credit_train$default,
+                       trials = 10)
+credit_boost10
+summary(credit_boost10)
+
+credit_boost_pred10 <- predict(credit_boost10, credit_test)
+CrossTable(credit_test$default, credit_boost_pred10,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
+           dnn = c('actual default', 'predicted default'))
+```
+We can see that across the 10 iterations, our tree size shrunk from 57 to 47.5.
+The classifier made on the training examples greatly improves. The accuracy is (629+237)/900=96.2%.
+
+For the prediction confusion matrix on test dataset, the total accuracy also improves. Prediction accuracy=(62+20)/100=82%. Also, there are less false negative and false negative values, but the model still doesn't work well to predict default, predicting only 20/33=60.6% correctly.
+
+The lack of an even greater improvement may be a function of our relatively small training dataset, or it may just be a very difficult problem to solve.
+
+## Making some mistakes more costly than others
+The false negatives are most costly than false positives in this case.The C5.0 algorithm allows us to assign a penalty to different types of errors, in order to discourage a tree from making more costly mistakes.
+
+## create dimensions for a cost matrix
+```{r}
+matrix_dimensions <- list(c("no", "yes"), c("no", "yes"))
+names(matrix_dimensions) <- c("predicted", "actual")
+matrix_dimensions
+```
+Here, we describe a 2 x 2 matrix, using a list of two vectors, each with two values of "no" and "yes". At the same time, we also name the matrix dimensions to avoid confusion later on.
+
+## build the matrix
+Then, we assign different penalties for various errors based on their importance. Suppose we believe that a loan default costs the bank four times as much as a missed opportunity. Our penalty values could then be defined as:
+```{r}
+error_cost <- matrix(c(0, 1, 4, 0), nrow = 2, dimnames = matrix_dimensions)
+error_cost
+```
+## apply the cost matrix to the tree
+```{r}
+credit_cost <- C5.0(credit_train[-17], credit_train$default,
+                          costs = error_cost)
+credit_cost_pred <- predict(credit_cost, credit_test)
+
+CrossTable(credit_test$default, credit_cost_pred,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
+           dnn = c('actual default', 'predicted default'))
+```
+Follow the same prediction steps before, after applying the cost matrix, the confusion matrix shows more mistakes overall and the overall accuracy decreases to (37+26)/100=63%. However, we greatly decrease the false negatives and improve the accuracy to 26/33=79% by sacrificing the prediction accuracy of false positives.
+
+
